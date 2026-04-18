@@ -208,6 +208,7 @@ See the `examples/` folder:
 - **hello_world.py** — Basic text and shapes
 - **dashboard.py** — Status dashboard with panels and progress bars
 - **fonts_demo.py** — All built-in fonts side by side
+- **test_all.py** — Visual test suite: 6 pages covering every API feature
 
 ## Module Structure
 
@@ -222,11 +223,11 @@ pico_paper_lib/
 
 ## Testing
 
-`test_all.py` is a visual test that renders 6 pages on the e-paper, covering lines, shapes, text, layout, widgets, and edge cases.
+`examples/test_all.py` is a visual test that renders 6 pages on the e-paper, covering lines, shapes, text, layout, widgets, and edge cases.
 
 ```bash
 cd ../pico-ctl
-python3 pico_ctl.py upload ../pico-paper-lib/test_all.py /test_all.py
+python3 pico_ctl.py upload ../pico-paper-lib/examples/test_all.py /test_all.py
 python3 pico_ctl.py run test_all.py
 ```
 
