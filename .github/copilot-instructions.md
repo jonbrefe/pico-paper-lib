@@ -28,6 +28,7 @@ display.py    → High-level canvas: drawing, text, widgets (wraps Driver + Fram
 graphics.py   → Pure geometry primitives (Bresenham circle, scanline fill, etc.)
 fonts.py      → BitmapFont base class + Font5x7 + Font8x8 with Spanish char support
 examples/     → Standalone demos (hello_world, dashboard, fonts_demo)
+package.json  → mip manifest for installing via mip.install("github:jonbrefe/pico-paper-lib")
 ```
 
 - `display.py` depends on `driver.py`, `graphics.py`, and `fonts.py`
@@ -41,6 +42,22 @@ examples/     → Standalone demos (hello_world, dashboard, fonts_demo)
 - Font glyphs for accented/Spanish characters go in `_EXT` dict on the font class, keyed by Unicode codepoint
 - Partial refresh requires calling `full_update_base()` first to set the reference frame
 - Memory is precious (~163KB free after loading). Avoid unnecessary allocations; prefer in-place operations.
+
+## Installation
+
+Install via `mip` (recommended):
+
+```bash
+# From pico-ctl/
+python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+```
+
+Or on the Pico directly:
+
+```python
+import mip
+mip.install("github:jonbrefe/pico-paper-lib")
+```
 
 ## Testing
 
