@@ -1,0 +1,10 @@
+{
+    "urls": [
+        ["pico_paper_lib/__init__.py", "github:jonbrefe/pico-paper-lib/__init__.py"],
+        ["pico_paper_lib/display.py", "github:jonbrefe/pico-paper-lib/display.py"],
+        ["pico_paper_lib/driver.py", "github:jonbrefe/pico-paper-lib/driver.py"],
+        ["pico_paper_lib/graphics.py", "github:jonbrefe/pico-paper-lib/graphics.py"],
+        ["pico_paper_lib/fonts.py", "github:jonbrefe/pico-paper-lib/fonts.py"]
+    ],
+    "version": "0.1.0"
+}

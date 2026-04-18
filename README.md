@@ -44,6 +44,23 @@ d.sleep()
 
 ## Installation
 
+### Option 1: `mip` (recommended)
+
+Install directly on the Pico over WiFi:
+
+```python
+import mip
+mip.install("github:jonbrefe/pico-paper-lib")
+```
+
+Or from the host via `mpremote`:
+
+```bash
+mpremote mip install github:jonbrefe/pico-paper-lib
+```
+
+### Option 2: Manual upload
+
 Copy the `pico_paper_lib/` folder to your Pico's filesystem:
 
 ```
@@ -55,7 +72,7 @@ Copy the `pico_paper_lib/` folder to your Pico's filesystem:
     fonts.py
 ```
 
-Using [pico-ctl](../pico-ctl):
+Using [pico-ctl](https://github.com/jonbrefe/pico-ctl):
 
 ```bash
 cd ../pico-ctl
