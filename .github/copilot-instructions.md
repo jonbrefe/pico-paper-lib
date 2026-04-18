@@ -55,8 +55,7 @@ Detailed technical reference lives in `docs/`:
 Install via `mip` (recommended):
 
 ```bash
-# From pico-ctl/
-python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+pico_ctl mip github:jonbrefe/pico-paper-lib
 ```
 
 Or on the Pico directly:

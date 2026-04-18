@@ -75,8 +75,7 @@ Copy the `pico_paper_lib/` folder to your Pico's filesystem:
 Using [pico-ctl](https://github.com/jonbrefe/pico-ctl):
 
 ```bash
-cd ../pico-ctl
-python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
+pico_ctl upload --dir ../pico-paper-lib /pico_paper_lib
 ```
 
 Or use [mpremote](https://docs.micropython.org/en/latest/reference/mpremote.html), Thonny, or any serial upload tool.
@@ -289,9 +288,8 @@ pico_paper_lib/
 `examples/test_all.py` is a visual test that renders 7 pages on the e-paper, covering lines, shapes, text, layout, widgets, edge cases, and 4-grayscale mode.
 
 ```bash
-cd ../pico-ctl
-python3 pico_ctl.py upload ../pico-paper-lib/examples/test_all.py /test_all.py
-python3 pico_ctl.py run test_all.py
+pico_ctl upload ../pico-paper-lib/examples/test_all.py /test_all.py
+pico_ctl run test_all.py
 ```
 
 ## Copilot Instructions
