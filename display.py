@@ -19,9 +19,10 @@ BLACK = 0x00
 WHITE = 0xFF
 
 # Colour aliases for 4-grayscale mode (GS2_HMSB encoding)
+# Wiki: Black=00, Light Grey=01, Dark Grey=10, White=11
 GRAY_BLACK = 0x00
-GRAY_DARKGRAY = 0x01
-GRAY_LIGHTGRAY = 0x02
+GRAY_LIGHTGRAY = 0x01
+GRAY_DARKGRAY = 0x02
 GRAY_WHITE = 0x03
 
 
@@ -346,13 +347,13 @@ class Display:
 
 
 class Display4Gray:
-    """4-grayscale e-paper canvas (portrait 128×296).
+    """4-grayscale e-paper canvas.
 
     Provides a ``framebuf.FrameBuffer`` in ``GS2_HMSB`` mode (2 bits per
     pixel) giving four gray levels: white, light gray, dark gray, black.
 
-    4-gray mode uses portrait orientation only (128×296) because the
-    SSD1680's 4-gray waveform is portrait-locked in hardware.
+    Supports both landscape (296×128, default) and portrait (128×296)
+    orientations.  Landscape mode rotates the image at refresh time.
 
     Usage::
 
@@ -360,16 +361,10 @@ class Display4Gray:
         from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY
         from pico_paper_lib.display import GRAY_LIGHTGRAY, GRAY_WHITE
 
-        g = Display4Gray()
+        g = Display4Gray()               # landscape by default
         g.clear()
-        g.fill_rect(0, 0, 128, 74, GRAY_BLACK)
-        g.text('BLACK', 10, 33, GRAY_WHITE)
-        g.fill_rect(0, 74, 128, 74, GRAY_DARKGRAY)
-        g.text('DARK', 10, 107, GRAY_LIGHTGRAY)
-        g.fill_rect(0, 148, 128, 74, GRAY_LIGHTGRAY)
-        g.text('LIGHT', 10, 181, GRAY_DARKGRAY)
-        g.fill_rect(0, 222, 128, 74, GRAY_WHITE)
-        g.text('WHITE', 10, 255, GRAY_BLACK)
+        g.fill_rect(0, 0, 296, 32, GRAY_BLACK)
+        g.text('Hello 4-gray!', 10, 10, GRAY_WHITE)
         g.refresh()
 
     .. note::
@@ -377,11 +372,16 @@ class Display4Gray:
         a standard ``Display`` to normal 1-bit operation.
     """
 
-    def __init__(self, **pin_kwargs):
+    def __init__(self, orientation=LANDSCAPE, **pin_kwargs):
         self._drv = Driver(**pin_kwargs)
-        self.width = WIDTH    # 128 (portrait)
-        self.height = HEIGHT  # 296 (portrait)
-        self._buf = bytearray(self.height * self.width // 4)
+        self._orientation = orientation
+        if orientation == LANDSCAPE:
+            self.width = HEIGHT   # 296
+            self.height = WIDTH   # 128
+        else:
+            self.width = WIDTH    # 128
+            self.height = HEIGHT  # 296
+        self._buf = bytearray(HEIGHT * WIDTH // 4)
         self._fb = framebuf.FrameBuffer(
             self._buf, self.width, self.height, framebuf.GS2_HMSB
         )
@@ -413,7 +413,10 @@ class Display4Gray:
     # ------------------------------------------------------------------
     def refresh(self):
         """Push the 4-gray canvas to the display (full refresh only)."""
-        self._drv.gray4_update(self._buf)
+        if self._orientation == LANDSCAPE:
+            self._drv.gray4_update_landscape(self._buf)
+        else:
+            self._drv.gray4_update(self._buf)
 
     def reinit_mono(self):
         """Re-initialise the driver for standard 1-bit mode."""

@@ -433,47 +433,46 @@ while True:
     # Covers: Display4Gray, fill_rect(), text(), hline(), refresh(),
     #         GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE
     # =================================================================
-    # 4-gray uses a separate Display4Gray object with portrait orientation
-    # (128×296) and GS2_HMSB framebuffer (2 bits per pixel, 4 gray levels).
+    # 4-gray uses a separate Display4Gray object with landscape orientation
+    # (296×128) and GS2_HMSB framebuffer (2 bits per pixel, 4 gray levels).
     g = Display4Gray()
     g.clear()
 
     # Title
     g.text('PAGE 7: 4-GRAY', 8, 4, GRAY_BLACK)
 
-    # -- Four gray bands --
-    # Each band is 128px wide × 50px tall, one per gray level.
-    band_h = 50
+    # -- Four gray bands (vertical strips across the width) --
+    band_w = 60
+    band_x = 8
     band_y = 18
-    g.fill_rect(0, band_y, 128, band_h, GRAY_BLACK)
-    g.text('BLACK', 10, band_y + 20, GRAY_WHITE)
+    g.fill_rect(band_x, band_y, band_w, 50, GRAY_BLACK)
+    g.text('BLACK', band_x + 4, band_y + 20, GRAY_WHITE)
 
-    g.fill_rect(0, band_y + band_h, 128, band_h, GRAY_DARKGRAY)
-    g.text('DARK GRAY', 10, band_y + band_h + 20, GRAY_LIGHTGRAY)
+    g.fill_rect(band_x + band_w, band_y, band_w, 50, GRAY_DARKGRAY)
+    g.text('DARK', band_x + band_w + 4, band_y + 20, GRAY_LIGHTGRAY)
 
-    g.fill_rect(0, band_y + band_h * 2, 128, band_h, GRAY_LIGHTGRAY)
-    g.text('LIGHT GRAY', 10, band_y + band_h * 2 + 20, GRAY_DARKGRAY)
+    g.fill_rect(band_x + band_w * 2, band_y, band_w, 50, GRAY_LIGHTGRAY)
+    g.text('LIGHT', band_x + band_w * 2 + 4, band_y + 20, GRAY_DARKGRAY)
 
-    g.fill_rect(0, band_y + band_h * 3, 128, band_h, GRAY_WHITE)
-    g.text('WHITE', 10, band_y + band_h * 3 + 20, GRAY_BLACK)
+    g.fill_rect(band_x + band_w * 3, band_y, band_w, 50, GRAY_WHITE)
+    g.text('WHITE', band_x + band_w * 3 + 4, band_y + 20, GRAY_BLACK)
 
     # -- Gradient bar (4 columns) --
-    grad_y = band_y + band_h * 4 + 4
+    grad_y = 72
     g.text('Gradient:', 8, grad_y, GRAY_BLACK)
-    grad_y += 12
     colors_4g = [GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE]
     for i, c in enumerate(colors_4g):
-        g.fill_rect(i * 32, grad_y, 32, 24, c)
+        g.fill_rect(8 + i * 60, grad_y + 12, 60, 16, c)
 
     # -- Checkerboard --
-    check_y = grad_y + 30
-    g.text('Checkerboard:', 8, check_y, GRAY_BLACK)
-    check_y += 12
-    sq = 16
+    check_x = 8
+    check_y = 102
+    g.text('Check:', check_x, check_y, GRAY_BLACK)
+    sq = 12
     for row in range(2):
-        for col in range(8):
-            g.fill_rect(col * sq, check_y + row * sq, sq, sq,
-                        colors_4g[(row + col) % 4])
+        for col in range(16):
+            g.fill_rect(check_x + 40 + col * sq, check_y + row * sq,
+                        sq, sq, colors_4g[(row + col) % 4])
 
     g.refresh()
     # Re-init driver for 1-bit mode so the next loop iteration works

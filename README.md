@@ -104,35 +104,33 @@ d = Display(orientation=LANDSCAPE)
 
 #### 4-Grayscale Mode
 
-The display supports a 4-level grayscale mode (black, dark gray, light gray, white) using a separate `Display4Gray` class. This mode uses portrait orientation (128×296) and the `GS2_HMSB` framebuffer format.
+The display supports a 4-level grayscale mode (black, dark gray, light gray, white) using a separate `Display4Gray` class. Supports both landscape (296×128, default) and portrait (128×296) orientations via the `orientation` parameter. Uses the `GS2_HMSB` framebuffer format.
 
 ```python
 from pico_paper_lib import Display4Gray
 from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE
+from pico_paper_lib.display import LANDSCAPE, PORTRAIT
 
+# Landscape (default) — 296×128
 g = Display4Gray()
 g.clear()
+g.fill_rect(0, 0, 74, 128, GRAY_BLACK)
+g.text('Hello 4-gray!', 80, 55, GRAY_BLACK)
+g.refresh()
+g.sleep()
 
-# Four bands in each gray level
+# Portrait — 128×296
+g = Display4Gray(orientation=PORTRAIT)
+g.clear()
 g.fill_rect(0, 0, 128, 74, GRAY_BLACK)
 g.text('BLACK', 10, 33, GRAY_WHITE)
-
-g.fill_rect(0, 74, 128, 74, GRAY_DARKGRAY)
-g.text('DARK', 10, 107, GRAY_LIGHTGRAY)
-
-g.fill_rect(0, 148, 128, 74, GRAY_LIGHTGRAY)
-g.text('LIGHT', 10, 181, GRAY_DARKGRAY)
-
-g.fill_rect(0, 222, 128, 74, GRAY_WHITE)
-g.text('WHITE', 10, 255, GRAY_BLACK)
-
-g.refresh()   # full refresh with 4-gray waveform
+g.refresh()
 g.sleep()
 ```
 
 | Method | Description |
 |---|---|
-| `Display4Gray(**pins)` | Create 4-gray canvas (portrait 128×296) |
+| `Display4Gray(orientation=LANDSCAPE, **pins)` | Create 4-gray canvas (landscape 296×128 by default) |
 | `g.clear(color=GRAY_WHITE)` | Fill canvas with gray level |
 | `g.fill_rect(x, y, w, h, color)` | Filled rectangle |
 | `g.rect(x, y, w, h, color, fill)` | Rectangle (outline or filled) |
@@ -150,11 +148,11 @@ g.sleep()
 | Constant | Value | Appearance |
 |---|---|---|
 | `GRAY_BLACK` | `0x00` | Black |
-| `GRAY_DARKGRAY` | `0x01` | Dark gray |
-| `GRAY_LIGHTGRAY` | `0x02` | Light gray |
+| `GRAY_LIGHTGRAY` | `0x01` | Light gray |
+| `GRAY_DARKGRAY` | `0x02` | Dark gray |
 | `GRAY_WHITE` | `0x03` | White |
 
-> **Note:** 4-gray mode is portrait-only (128×296) and uses full refresh.
+> **Note:** 4-gray mode uses full refresh only (no partial refresh).
 > After using 4-gray, call `reinit_mono()` before switching back to a
 > standard `Display` instance.
 

@@ -200,21 +200,33 @@ class Driver:
         self._data(_LUT_4GRAY[158])
 
     def _hw_init_4gray(self):
-        """Hardware init for 4-grayscale mode."""
+        """Hardware init for 4-grayscale mode.
+
+        Based on the working Waveshare C implementation (EPD_2IN9_V2_Gray4_Init).
+        Always uses mode 0x03 (row-major) matching the C code.
+        """
         self._reset()
+        utime.sleep_ms(100)
         self._wait()
         self._cmd(0x12)          # SW_RESET
         self._wait()
+        self._cmd(0x74)          # analog block control
+        self._data(0x54)
+        self._cmd(0x7E)          # digital block control
+        self._data(0x3B)
         self._cmd(0x01)          # DRIVER_OUTPUT_CONTROL
         self._data(0x27)         # MUX = 295
         self._data(0x01)
         self._data(0x00)
         self._cmd(0x11)          # DATA_ENTRY_MODE
-        self._data(0x03)         # X inc, Y inc (portrait)
-        self._set_window(8, 0, self.width, self.height - 1)
+        self._data(0x03)         # X inc, Y inc, X-first (row-major)
+        self._set_window(0, 0, self.width - 1, self.height - 1)
         self._cmd(0x3C)          # border waveform
-        self._data(0x04)
-        self._set_cursor(8, 0)
+        self._data(0x00)
+        self._cmd(0x21)          # display update control
+        self._data(0x00)
+        self._data(0x80)
+        self._set_cursor(0, 0)
         self._wait()
         self._send_lut_4gray()
 
@@ -307,6 +319,9 @@ class Driver:
 
         Pixel encoding (GS2_HMSB):
           0x03 = white, 0x02 = light gray, 0x01 = dark gray, 0x00 = black
+
+        Bit-plane conversion matches the Waveshare C implementation
+        (EPD_2IN9_V2_4GrayDisplay) — MSB-first extraction from 2bpp buffer.
         """
         self._hw_init_4gray()
         total = self.height * self.width // 8  # 4736 output bytes (1bpp per plane)
@@ -318,29 +333,29 @@ class Driver:
             for j in range(2):
                 temp1 = buf[i * 2 + j]
                 for k in range(2):
-                    temp2 = temp1 & 0x03
-                    if temp2 == 0x03:
+                    temp2 = temp1 & 0xC0
+                    if temp2 == 0xC0:
                         temp3 |= 0x00   # white
                     elif temp2 == 0x00:
                         temp3 |= 0x01   # black
-                    elif temp2 == 0x02:
-                        temp3 |= 0x00   # light gray
+                    elif temp2 == 0x80:
+                        temp3 |= 0x01   # 10
                     else:
-                        temp3 |= 0x01   # dark gray
+                        temp3 |= 0x00   # 01
                     temp3 <<= 1
-                    temp1 >>= 2
-                    temp2 = temp1 & 0x03
-                    if temp2 == 0x03:
+                    temp1 <<= 2
+                    temp2 = temp1 & 0xC0
+                    if temp2 == 0xC0:
                         temp3 |= 0x00
                     elif temp2 == 0x00:
                         temp3 |= 0x01
-                    elif temp2 == 0x02:
-                        temp3 |= 0x00
-                    else:
+                    elif temp2 == 0x80:
                         temp3 |= 0x01
+                    else:
+                        temp3 |= 0x00
                     if j != 1 or k != 1:
                         temp3 <<= 1
-                    temp1 >>= 2
+                    temp1 <<= 2
             self._data(temp3)
 
         # --- Bit-plane 1 → RAM 0x26 ---
@@ -350,32 +365,87 @@ class Driver:
             for j in range(2):
                 temp1 = buf[i * 2 + j]
                 for k in range(2):
-                    temp2 = temp1 & 0x03
-                    if temp2 == 0x03:
+                    temp2 = temp1 & 0xC0
+                    if temp2 == 0xC0:
                         temp3 |= 0x00   # white
                     elif temp2 == 0x00:
                         temp3 |= 0x01   # black
-                    elif temp2 == 0x02:
-                        temp3 |= 0x01   # light gray
+                    elif temp2 == 0x80:
+                        temp3 |= 0x00   # 10
                     else:
-                        temp3 |= 0x00   # dark gray
+                        temp3 |= 0x01   # 01
                     temp3 <<= 1
-                    temp1 >>= 2
-                    temp2 = temp1 & 0x03
-                    if temp2 == 0x03:
+                    temp1 <<= 2
+                    temp2 = temp1 & 0xC0
+                    if temp2 == 0xC0:
                         temp3 |= 0x00
                     elif temp2 == 0x00:
                         temp3 |= 0x01
-                    elif temp2 == 0x02:
-                        temp3 |= 0x01
-                    else:
+                    elif temp2 == 0x80:
                         temp3 |= 0x00
+                    else:
+                        temp3 |= 0x01
                     if j != 1 or k != 1:
                         temp3 <<= 1
-                    temp1 >>= 2
+                    temp1 <<= 2
             self._data(temp3)
 
         # Trigger 4-gray display update
+        self._cmd(0x22)
+        self._data(0xC7)
+        self._cmd(0x20)
+        self._wait()
+
+    def gray4_update_landscape(self, buf):
+        """Display a 4-gray image from a landscape (296×128) GS2_HMSB buffer.
+
+        Uses data entry mode 0x03 (row-major, same as Waveshare C code).
+        Rotates the landscape framebuffer to portrait during bit-plane
+        conversion.
+
+        Mode 0x03 RAM fill order:
+          py=0..295 (gate lines), px_byte=0..15 (X bytes) per gate line.
+
+        Mapping:  py → landscape X,  px_byte → landscape Y group.
+
+        GS2_HMSB pixel order: pixel 0 at LSB (bits 1:0), so
+        shift = 2 * (lx % 4), NOT 6 - 2*(lx%4).
+        """
+        self._hw_init_4gray()
+        stride = self.height // 4  # 74 bytes per landscape row (296/4)
+
+        # --- Bit-plane 0 → RAM 0x24 ---
+        self._cmd(0x24)
+        for py in range(self.height):           # 0..295 (gate lines)
+            lx_byte = py >> 2                   # py // 4
+            lx_shift = (py & 3) << 1            # 2*(py%4) — GS2_HMSB LSB-first
+            for px_byte in range(self.width >> 3):  # 0..15
+                out = 0
+                ly_base = 127 - (px_byte << 3)  # 127 - px_byte*8
+                for bit in range(8):
+                    ly = ly_base - bit
+                    gray = (buf[ly * stride + lx_byte] >> lx_shift) & 3
+                    # Plane 0: set bit for black(0) and dark gray(2)
+                    if gray == 0 or gray == 2:
+                        out |= (0x80 >> bit)
+                self._data(out)
+
+        # --- Bit-plane 1 → RAM 0x26 ---
+        self._cmd(0x26)
+        for py in range(self.height):
+            lx_byte = py >> 2
+            lx_shift = (py & 3) << 1
+            for px_byte in range(self.width >> 3):
+                out = 0
+                ly_base = 127 - (px_byte << 3)
+                for bit in range(8):
+                    ly = ly_base - bit
+                    gray = (buf[ly * stride + lx_byte] >> lx_shift) & 3
+                    # Plane 1: set bit for black(0) and light gray(1)
+                    if gray == 0 or gray == 1:
+                        out |= (0x80 >> bit)
+                self._data(out)
+
         self._cmd(0x22)
         self._data(0xC7)
         self._cmd(0x20)

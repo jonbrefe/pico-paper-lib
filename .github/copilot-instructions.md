@@ -35,10 +35,18 @@ package.json  → mip manifest for installing via mip.install("github:jonbrefe/p
 - `graphics.py` and `fonts.py` are independent of each other
 - `driver.py` talks directly to hardware (SPI, GPIO)
 
+## Hardware Documentation
+
+Detailed technical references live in `docs/`:
+
+- **`docs/SSD1680_TECHNICAL_REFERENCE.md`** — Complete hardware reference: SPI registers, data entry modes (0x03 vs 0x07), framebuffer formats (MONO_VLSB, GS2_HMSB), 4-gray bit-plane encoding, init sequences, and the mono landscape byte-reorder algorithm. **Read this first** when working on driver.py or display rotation.
+- **`docs/GRAY4_LANDSCAPE_FINDINGS.md`** — Investigation and resolution of the 4-gray landscape mirror issue. Documents the GS2_HMSB shift fix and silent upload failures.
+
 ## Conventions
 
 - Display orientation: landscape (296 wide × 128 tall) by default
 - Color values: `BLACK = 0x00`, `WHITE = 0xFF`
+- 4-gray color values: `GRAY_BLACK = 0x00`, `GRAY_LIGHTGRAY = 0x01`, `GRAY_DARKGRAY = 0x02`, `GRAY_WHITE = 0x03`
 - Font glyphs for accented/Spanish characters go in `_EXT` dict on the font class, keyed by Unicode codepoint
 - Partial refresh requires calling `full_update_base()` first to set the reference frame
 - Memory is precious (~163KB free after loading). Avoid unnecessary allocations; prefer in-place operations.
