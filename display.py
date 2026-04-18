@@ -452,8 +452,43 @@ class Display4Gray:
         self._fb.fill_rect(x, y, w, h, color)
 
     def text(self, s, x, y, color=GRAY_BLACK, font=None):
-        """Draw text using the built-in framebuf 8×8 font (GS2 mode)."""
-        self._fb.text(s, x, y, color)
+        """Draw text at (x, y) using the current or specified font."""
+        f = font or self._font
+        f.draw_text(self._fb, s, x, y, color)
+
+    def text_centered(self, s, cx, y, color=GRAY_BLACK, font=None):
+        """Draw text horizontally centered around *cx*."""
+        f = font or self._font
+        f.draw_text_centered(self._fb, s, cx, y, color)
+
+    def text_right(self, s, right_x, y, color=GRAY_BLACK, font=None):
+        """Draw text right-aligned at *right_x*."""
+        f = font or self._font
+        f.draw_text_right(self._fb, s, right_x, y, color)
+
+    def text_width(self, s, font=None):
+        """Return pixel width of string *s*."""
+        f = font or self._font
+        return f.text_width(s)
 
     def set_font(self, font):
         self._font = font
+
+    def icon(self, data, x, y, w=7, h=7, color=GRAY_BLACK):
+        """Draw a column-major bitmap icon (LSB=top)."""
+        for col in range(w):
+            byte = data[col]
+            for row in range(h):
+                if byte & (1 << row):
+                    self._fb.pixel(x + col, y + row, color)
+
+    def badge(self, s, x, y, color=GRAY_BLACK, padding=2, font=None):
+        """Draw a text badge (inverted text in a filled rectangle)."""
+        f = font or self._font
+        tw = f.text_width(s)
+        th = f.CHAR_H
+        bw = tw + padding * 2
+        bh = th + padding * 2
+        self.fill_rect(x, y, bw, bh, color)
+        inv = GRAY_WHITE if color <= GRAY_DARKGRAY else GRAY_BLACK
+        f.draw_text(self._fb, s, x + padding, y + padding, inv)
