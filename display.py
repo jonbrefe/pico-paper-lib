@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """
 High-level Display canvas — the main entry point for the library.
 
@@ -96,8 +98,12 @@ class Display:
     def refresh(self, full=True):
         """Push the canvas to the display.
 
-        full=True  → full refresh (flashes, best quality)
-        full=False → partial refresh (fast, may ghost over time)
+        *full* (bool): True for full refresh (~2-3s, flashes, best quality).
+        False for partial refresh (~0.3-0.5s, no flash, may ghost over time).
+
+        The first call always does a full base refresh (writes to both RAM
+        frames) regardless of the *full* parameter.  This is required to
+        establish the reference frame for future partial updates.
         """
         if full:
             if not self._base_set:
@@ -158,9 +164,11 @@ class Display:
         self._fb.vline(x, y, h, color)
 
     def dashed_line(self, x0, y0, x1, y1, color=BLACK, dash=4, gap=3):
+        """Draw a dashed line.  *dash* and *gap* are pixel lengths."""
         gfx.dashed_line(self._fb, x0, y0, x1, y1, color, dash, gap)
 
     def dotted_line(self, x0, y0, x1, y1, color=BLACK, spacing=3):
+        """Draw a dotted line (pixels at *spacing*-pixel intervals)."""
         gfx.dotted_line(self._fb, x0, y0, x1, y1, color, spacing)
 
     # ------------------------------------------------------------------
@@ -175,6 +183,7 @@ class Display:
         self._fb.fill_rect(x, y, w, h, color)
 
     def rounded_rect(self, x, y, w, h, r, color=BLACK, fill=False):
+        """Draw a rounded rectangle with corner radius *r*."""
         gfx.rounded_rect(self._fb, x, y, w, h, r, color, fill)
 
     # ------------------------------------------------------------------
@@ -229,13 +238,24 @@ class Display:
 
     def text_in_rect(self, s, x, y, w, h, color=BLACK,
                      align='left', valign='top', wrap=False, font=None, pad=4):
-        """Draw text inside a bounding rectangle with alignment."""
+        """Draw text inside a bounding rectangle with alignment.
+
+        *align*: 'left', 'center', or 'right'.
+        *valign*: 'top', 'middle', or 'bottom'.
+        *wrap*: if True, word-wraps text to fit the rectangle width.
+        *pad*: pixel padding inside all four edges (default 4).
+        Text exceeding the rectangle is clipped to the FrameBuffer bounds.
+        """
         f = font or self._font
         f.draw_text_in_rect(self._fb, s, x, y, w, h, color, align, valign, wrap, pad)
 
     def text_wrapped(self, s, x, y, max_width, color=BLACK,
                      font=None, line_spacing=1):
-        """Draw word-wrapped text."""
+        """Draw word-wrapped text.  Returns total height in pixels used.
+
+        Long words that exceed *max_width* are NOT broken mid-word — they
+        overflow the line.  Split long words manually if needed.
+        """
         f = font or self._font
         return f.draw_text_wrapped(self._fb, s, x, y, max_width, color, line_spacing)
 
@@ -290,8 +310,15 @@ class Display:
               font=None, row_height=None):
         """Draw a simple table with headers and data rows.
 
+        *headers* is a list of column header strings.
+        *rows* is a list of row lists (each row is a list of cell strings).
         *col_widths* is a list of pixel widths for each column.
-        *rows* is a list of lists of strings.
+        *row_height* defaults to font height + 3px padding.
+
+        If a row has fewer cells than *col_widths*, extra columns are blank.
+        If a row has more cells, the last col_width is reused.
+        Draws an inverted (white-on-black) header row, horizontal separators
+        between data rows, and vertical column separators.
         """
         f = font or self._font
         rh = row_height or (f.CHAR_H + 3)
@@ -373,6 +400,11 @@ class Display4Gray:
     """
 
     def __init__(self, orientation=LANDSCAPE, **pin_kwargs):
+        """Create a 4-gray display canvas.
+
+        *orientation* is LANDSCAPE (296×128, default) or PORTRAIT (128×296).
+        *pin_kwargs* are forwarded to the Driver (rst, dc, cs, busy, spi_id, baudrate).
+        """
         self._drv = Driver(**pin_kwargs)
         self._orientation = orientation
         if orientation == LANDSCAPE:
@@ -412,14 +444,24 @@ class Display4Gray:
     # Refresh
     # ------------------------------------------------------------------
     def refresh(self):
-        """Push the 4-gray canvas to the display (full refresh only)."""
+        """Push the 4-gray canvas to the display.
+
+        Always a full refresh (~3 seconds).  4-gray mode does not support
+        partial refresh.  Re-initialises the hardware to 4-gray mode
+        internally before each update.
+        """
         if self._orientation == LANDSCAPE:
             self._drv.gray4_update_landscape(self._buf)
         else:
             self._drv.gray4_update(self._buf)
 
     def reinit_mono(self):
-        """Re-initialise the driver for standard 1-bit mode."""
+        """Re-initialise the driver for standard 1-bit mono mode.
+
+        Call this after you are done with 4-gray and want to create a
+        new ``Display`` instance.  Without this, the driver is still in
+        4-gray init state and mono refresh will produce incorrect output.
+        """
         self._drv.reinit()
 
     def sleep(self):
@@ -434,24 +476,30 @@ class Display4Gray:
     # Drawing (framebuf builtins — colors are 0..3)
     # ------------------------------------------------------------------
     def pixel(self, x, y, color=GRAY_BLACK):
+        """Set a single pixel to a gray level (0-3)."""
         self._fb.pixel(x, y, color)
 
     def line(self, x0, y0, x1, y1, color=GRAY_BLACK):
+        """Draw a line."""
         self._fb.line(x0, y0, x1, y1, color)
 
     def hline(self, x, y, w, color=GRAY_BLACK):
+        """Draw a horizontal line of *w* pixels."""
         self._fb.hline(x, y, w, color)
 
     def vline(self, x, y, h, color=GRAY_BLACK):
+        """Draw a vertical line of *h* pixels."""
         self._fb.vline(x, y, h, color)
 
     def rect(self, x, y, w, h, color=GRAY_BLACK, fill=False):
+        """Draw a rectangle (outline or filled)."""
         if fill:
             self._fb.fill_rect(x, y, w, h, color)
         else:
             self._fb.rect(x, y, w, h, color)
 
     def fill_rect(self, x, y, w, h, color=GRAY_BLACK):
+        """Draw a filled rectangle."""
         self._fb.fill_rect(x, y, w, h, color)
 
     def text(self, s, x, y, color=GRAY_BLACK, font=None):
@@ -475,6 +523,7 @@ class Display4Gray:
         return f.text_width(s)
 
     def set_font(self, font):
+        """Set the default font for subsequent text calls."""
         self._font = font
 
     def icon(self, data, x, y, w=7, h=7, color=GRAY_BLACK):

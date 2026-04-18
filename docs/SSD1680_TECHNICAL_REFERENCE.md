@@ -18,6 +18,23 @@ this codebase.
 | Interface | SPI (4-wire: MOSI, SCK, CS, DC) + RST + BUSY |
 | Default Pico pins | RST=12, DC=8, CS=9, BUSY=13, SPI1 at 4 MHz |
 
+### Wiring
+
+| Signal | Pico GPIO | SPI1 Function | Direction |
+|--------|-----------|---------------|----------|
+| MOSI | GP11 | SPI1 TX | Pico → Display |
+| SCK | GP10 | SPI1 SCK | Pico → Display |
+| CS | GP9 | Directly driven (GPIO) | Pico → Display |
+| DC | GP8 | Directly driven (GPIO) | Pico → Display |
+| RST | GP12 | Directly driven (GPIO) | Pico → Display |
+| BUSY | GP13 | Directly driven (GPIO) | Display → Pico |
+| GND | GND | — | Common |
+| VCC | 3V3 | — | Power |
+
+> SPI1 is used because SPI0's default pins conflict with the Waveshare CapTouch
+> board layout. MOSI/SCK are auto-assigned by `machine.SPI(1)`; CS is manually
+> toggled via GPIO (not hardware CS).
+
 ## Coordinate System
 
 The display's **native orientation is portrait**: 128 pixels wide, 296 tall.
@@ -55,6 +72,18 @@ The SSD1680 uses a command/data protocol controlled by the DC pin:
 | HIGH | Data byte(s) |
 
 All transfers are MSB-first. CS is active low.
+
+### BUSY Pin
+
+The BUSY pin is an **active-high output** from the display:
+
+| BUSY state | Meaning |
+|------------|--------|
+| **HIGH (1)** | Display is busy — do NOT send commands |
+| **LOW (0)** | Display is idle — ready for next command |
+
+Poll with `Pin.PULL_UP` and wait for LOW after any reset, init, or display
+update command. The driver uses a 5-second timeout with 10ms polling interval.
 
 ### Key Command Registers
 
@@ -142,14 +171,36 @@ buf[col + row_byte * 296]
 
 Used by the `Display4Gray` class. MicroPython's `framebuf.GS2_HMSB`.
 
-- 2 bits per pixel, horizontal MSB-first layout
+- 2 bits per pixel, horizontal layout
 - Each byte stores 4 pixels
-- Pixel 0 (leftmost) = bits 7:6
-- Pixel 1 = bits 5:4
-- Pixel 2 = bits 3:2
-- Pixel 3 (rightmost) = bits 1:0
+
+**Byte layout (per MicroPython docs):**
+```
+Byte:  [P0_hi P0_lo] [P1_hi P1_lo] [P2_hi P2_lo] [P3_hi P3_lo]
+Bits:     7     6       5     4       3     2       1     0
+```
+According to MicroPython documentation, GS2_HMSB is MSB-first: pixel 0 at
+bits 7:6, pixel 3 at bits 1:0.
+
+**However**, the shift formula that produces correct output on this
+hardware is `shift = 2 * (x % 4)`, which reads pixel 0 from the LSB end.
+This is the **opposite** of the documented MSB-first order.
+
+We do not know why this reversal occurs (possible MicroPython build
+difference, or RP2040-specific behavior). The important thing is:
+
+```python
+# CORRECT — use this to read pixel at (lx, ly) from a 296×128 landscape buffer:
+stride = 296 // 4   # 74 bytes per row
+byte_val = buf[ly * stride + lx // 4]
+shift = 2 * (lx % 4)
+gray = (byte_val >> shift) & 3
+```
+
+> **Do NOT use** `shift = 6 - 2*(lx%4)` — that produces mirrored output.
 
 Gray values:
+
 | Value | Bits | Color |
 |-------|------|-------|
 | 0x00 | 00 | Black |
@@ -157,23 +208,12 @@ Gray values:
 | 0x02 | 10 | Dark gray |
 | 0x03 | 11 | White |
 
-For a 296×128 landscape buffer:
-```
-stride = 296 / 4 = 74 bytes per row
-buf[ly * 74 + lx // 4]   → byte containing pixel at (lx, ly)
-shift = 2 * (lx % 4)     → bit position within byte (empirically determined)
-gray = (byte >> shift) & 3
-```
-
-> **Note:** The working shift formula `2 * (lx % 4)` was determined empirically
-> on the Pico. The standard MicroPython GS2_HMSB documentation suggests
-> `6 - 2 * (lx % 4)` (MSB-first), but only the LSB-first formula produces
-> correct landscape output. See `docs/GRAY4_LANDSCAPE_FINDINGS.md` for details.
-
 For a 128×296 portrait buffer:
 ```
-stride = 128 / 4 = 32 bytes per row
-buf[py * 32 + px // 4]   → byte containing pixel at (px, py)
+stride = 128 // 4   # 32 bytes per row
+byte_val = buf[py * stride + px // 4]
+shift = 2 * (px % 4)
+gray = (byte_val >> shift) & 3
 ```
 
 ## 4-Gray Bit-Plane Encoding
@@ -214,25 +254,203 @@ SET_CURSOR: (0, 0)
 ### 4-Gray Init (from Waveshare C: EPD_2IN9_V2_Gray4_Init)
 
 ```
-SW_RESET → wait
-ANALOG_BLOCK_CTRL (0x74): 0x54
-DIGITAL_BLOCK_CTRL (0x7E): 0x3B
-DRIVER_OUTPUT: [0x27, 0x01, 0x00]  (296 gates)
-DATA_ENTRY_MODE: 0x11 = 0x03       (row-major)
+SW_RESET → wait BUSY
+ANALOG_BLOCK_CTRL (cmd 0x74): data 0x54
+DIGITAL_BLOCK_CTRL (cmd 0x7E): data 0x3B
+DRIVER_OUTPUT (cmd 0x01): data [0x27, 0x01, 0x00]  (296 gates)
+DATA_ENTRY_MODE (cmd 0x11): data 0x03  (row-major)
 SET_WINDOW: (0, 0, 127, 295)
-BORDER_WAVEFORM (0x3C): 0x00
-DISPLAY_UPDATE_CTRL: [0x00, 0x80]
+BORDER_WAVEFORM (cmd 0x3C): data 0x00
+DISPLAY_UPDATE_CTRL (cmd 0x21): data [0x00, 0x80]
 SET_CURSOR: (0, 0)
-WRITE_LUT_4GRAY (159 bytes: 153 LUT + gate/source voltages + VCOM)
+WRITE_LUT_4GRAY (159 bytes — see below)
 ```
 
 ### 4-Gray Display Update
 
 After writing both planes (0x24 and 0x26):
 ```
-DISPLAY_UPDATE_CTRL2 (0x22): 0xC7
-MASTER_ACTIVATION (0x20)
-wait for BUSY
+DISPLAY_UPDATE_CTRL2 (cmd 0x22): data 0xC7
+MASTER_ACTIVATION (cmd 0x20)
+wait for BUSY → LOW
+```
+
+### 4-Gray Waveform LUT
+
+The 4-gray LUT is 159 bytes total. The first 153 bytes go to register 0x32
+(the waveform table). The remaining 6 bytes are written to separate voltage
+registers:
+
+```
+Bytes 0–152:   → cmd 0x32 (WRITE_LUT) — waveform lookup table
+Byte  153:     → cmd 0x3F — end option
+Byte  154:     → cmd 0x03 — gate driving voltage
+Bytes 155–157: → cmd 0x04 — source driving voltage (VSH, VSH2, VSL)
+Byte  158:     → cmd 0x2C — VCOM voltage
+```
+
+The actual byte values (from Waveshare `EPD_2in9_V2.c`, MIT license):
+
+```python
+_LUT_4GRAY = bytes([
+    0x00,0x60,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x20,0x60,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x28,0x60,0x14,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x2A,0x60,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x02,0x00,0x05,0x14,0x00,0x00,
+    0x1E,0x1E,0x00,0x00,0x00,0x00,0x01,
+    0x00,0x02,0x00,0x05,0x14,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x24,0x22,0x22,0x22,0x23,0x32,0x00,0x00,0x00,  # gate/source timing
+    0x22,0x17,0x41,0xAE,0x32,0x28,                  # 0x3F, 0x03, 0x04×3, 0x2C
+])
+```
+
+### Partial Refresh Waveform LUT
+
+Partial refresh uses a different waveform that avoids the full black/white
+flash. Same structure: 153 bytes to 0x32, then 6 bytes to voltage registers.
+
+**Prerequisites:** Call `full_update_base()` first to write the same image to
+both RAM 0x24 (current) and RAM 0x26 (previous). The SSD1680 diffs these
+two frames during partial refresh.
+
+```python
+_LUT_PARTIAL = bytes([
+    0x00,0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x80,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x40,0x40,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x80,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x0A,0x00,0x00,0x00,0x00,0x00,0x01,
+    0x01,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x01,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x22,0x22,0x22,0x22,0x22,0x22,0x00,0x00,0x00,
+    0x22,0x17,0x41,0xB0,0x32,0x36,
+])
+```
+
+### Partial Refresh Flow
+
+```
+1. RST pin: LOW 2ms → HIGH 2ms  (soft hardware reset)
+2. Load partial LUT (cmd 0x32)
+3. cmd 0x37: data [0x00,0x00,0x00,0x00,0x00,0x40,0x00,0x00,0x00,0x00]
+4. BORDER_WAVEFORM (cmd 0x3C): data 0x80
+5. DISPLAY_UPDATE_CTRL2 (cmd 0x22): data 0xC0
+6. MASTER_ACTIVATION (cmd 0x20) → wait BUSY
+7. SET_WINDOW + SET_CURSOR (reset RAM pointers)
+8. Write new image to RAM 0x24
+9. DISPLAY_UPDATE_CTRL2 (cmd 0x22): data 0x0F
+10. MASTER_ACTIVATION (cmd 0x20) → wait BUSY
+```
+
+> **Ghosting:** Partial refresh accumulates ghosting over time. Do a full
+> refresh every 5–10 partial updates to clean the display.
+
+## Deep Sleep & Wake
+
+### Entering Deep Sleep
+
+```
+DEEP_SLEEP (cmd 0x10): data 0x01
+wait 100ms
+```
+
+Power consumption drops to < 1 µA. All RAM contents are preserved but the
+controller ignores all commands except a hardware reset.
+
+### Waking from Deep Sleep
+
+A full hardware re-init is required — there is no "light wake" command:
+
+```
+RST pin: HIGH 50ms → LOW 2ms → HIGH 50ms  (hardware reset)
+Run the full init sequence (_hw_init or _hw_init_4gray)
+```
+
+In code: call `driver.wake()` which internally calls `_hw_init()`.
+
+## Refresh Timing
+
+| Refresh type | Duration | Flash | Use case |
+|-------------|----------|-------|----------|
+| Full refresh | ~2–3 seconds | Yes (black/white flash) | Best image quality, required periodically |
+| Partial refresh | ~0.3–0.5 seconds | No | Fast updates, accumulates ghosting |
+| 4-gray full refresh | ~3 seconds | Yes | Only option for 4-gray mode |
+
+> 4-gray mode does **not** support partial refresh. Every 4-gray update is a
+> full refresh.
+
+## End-to-End: Drawing a Pixel to Screen
+
+Here's the complete flow from "I want to draw something" to "I see it":
+
+### Mono (1-bit)
+
+```python
+from pico_paper_lib import Display
+
+d = Display()                      # 1. Init SPI + SSD1680 (mode 0x07)
+d.clear()                          # 2. Fill framebuffer with WHITE
+d.pixel(10, 10, 0)                 # 3. Set pixel in MONO_VLSB framebuffer
+d.text('Hello', 20, 20)            # 4. Draw text into framebuffer
+d.refresh()                        # 5. _write_image: rotate bytes, send to
+                                   #    RAM 0x24, trigger 0xF7 update
+d.sleep()                          # 6. cmd 0x10 → deep sleep
+```
+
+### 4-Gray
+
+```python
+from pico_paper_lib import Display4Gray
+from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY, GRAY_WHITE
+
+g = Display4Gray()                 # 1. Alloc GS2_HMSB framebuffer (296×128)
+g.clear()                          # 2. Fill with GRAY_WHITE
+g.fill_rect(0, 0, 74, 128, GRAY_BLACK)   # 3. Draw into framebuffer
+g.text('Hello 4-gray!', 80, 55, GRAY_DARKGRAY)
+g.refresh()                        # 4. _hw_init_4gray: re-init to mode 0x03,
+                                   #    load 4-gray LUT
+                                   # 5. gray4_update_landscape: extract 2-bit
+                                   #    pixels, split into bit-planes,
+                                   #    rotate to portrait, send to
+                                   #    RAM 0x24 + 0x26
+                                   # 6. Trigger 0xC7 update → wait BUSY
+g.sleep()
+```
+
+### Partial Refresh
+
+```python
+d = Display()
+d.clear()
+d.text('Base image', 10, 10)
+d.refresh(full=True)               # 1. full_update_base: writes to BOTH
+                                   #    RAM 0x24 and 0x26 (sets reference)
+# ... later ...
+d.text('Updated', 10, 30)
+d.refresh(full=False)              # 2. partial_update: load partial LUT,
+                                   #    write only to RAM 0x24, trigger
+                                   #    0x0F update (diffs against 0x26)
 ```
 
 ## Mono Landscape Byte Reorder
@@ -260,14 +478,7 @@ Each byte in MONO_VLSB contains 8 vertical pixels. In landscape, these become
 
 ## Known Issues
 
-None — all known issues have been resolved.
-
-### 4-Gray Landscape (RESOLVED)
-
-The landscape mirror issue was caused by using the wrong GS2_HMSB pixel
-extraction shift. Changing from `6 - ((py & 3) << 1)` to `(py & 3) << 1`
-in `gray4_update_landscape()` resolved the problem.
-See `docs/GRAY4_LANDSCAPE_FINDINGS.md` for the full investigation.
+None.
 
 ## References
 

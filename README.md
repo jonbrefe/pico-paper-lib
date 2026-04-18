@@ -134,14 +134,22 @@ g.sleep()
 | `g.clear(color=GRAY_WHITE)` | Fill canvas with gray level |
 | `g.fill_rect(x, y, w, h, color)` | Filled rectangle |
 | `g.rect(x, y, w, h, color, fill)` | Rectangle (outline or filled) |
-| `g.text(s, x, y, color)` | Text (built-in 8×8 font) |
+| `g.text(s, x, y, color, font)` | Left-aligned text |
+| `g.text_centered(s, cx, y, color, font)` | Center text around cx |
+| `g.text_right(s, right_x, y, color, font)` | Right-aligned text |
+| `g.text_width(s, font)` | Measure string width in pixels |
+| `g.set_font(font)` | Set default font |
+| `g.icon(data, x, y, color)` | Draw 7×7 column-major bitmap icon |
+| `g.badge(label, x, y, color)` | Inverted text badge |
 | `g.line(x0, y0, x1, y1, color)` | Line |
 | `g.hline(x, y, w, color)` | Horizontal line |
 | `g.vline(x, y, h, color)` | Vertical line |
 | `g.pixel(x, y, color)` | Single pixel |
-| `g.refresh()` | Push to display (4-gray waveform) |
+| `g.refresh()` | Push to display (4-gray waveform, ~3s) |
 | `g.reinit_mono()` | Return driver to 1-bit mode |
 | `g.sleep()` / `g.wake()` | Power management |
+| `g.framebuffer` | Access raw `framebuf.FrameBuffer` |
+| `g.buffer` | Access raw byte buffer |
 
 **Gray level constants:**
 

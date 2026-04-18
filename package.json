@@ -6,5 +6,9 @@
         ["pico_paper_lib/graphics.py", "github:jonbrefe/pico-paper-lib/graphics.py"],
         ["pico_paper_lib/fonts.py", "github:jonbrefe/pico-paper-lib/fonts.py"]
     ],
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "MicroPython library for Waveshare 2.9 inch e-paper displays (SSD1680) on Raspberry Pi Pico W",
+    "author": "Jonathan Brenes",
+    "license": "MIT",
+    "homepage": "https://github.com/jonbrefe/pico-paper-lib"
 }

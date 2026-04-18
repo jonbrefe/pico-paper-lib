@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """
 pico-paper-lib — A MicroPython library for Waveshare 2.9" e-paper on Raspberry Pi Pico W.
 

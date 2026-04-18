@@ -37,10 +37,9 @@ package.json  → mip manifest for installing via mip.install("github:jonbrefe/p
 
 ## Hardware Documentation
 
-Detailed technical references live in `docs/`:
+Detailed technical reference lives in `docs/`:
 
 - **`docs/SSD1680_TECHNICAL_REFERENCE.md`** — Complete hardware reference: SPI registers, data entry modes (0x03 vs 0x07), framebuffer formats (MONO_VLSB, GS2_HMSB), 4-gray bit-plane encoding, init sequences, and the mono landscape byte-reorder algorithm. **Read this first** when working on driver.py or display rotation.
-- **`docs/GRAY4_LANDSCAPE_FINDINGS.md`** — Investigation and resolution of the 4-gray landscape mirror issue. Documents the GS2_HMSB shift fix and silent upload failures.
 
 ## Conventions
 
@@ -69,16 +68,33 @@ mip.install("github:jonbrefe/pico-paper-lib")
 
 ## Testing
 
-There is no automated test suite. The `test_all.py` file is a visual test that renders 6 pages on the e-paper display.
+There is no automated test suite — all testing is visual on real hardware.
 
-Test by uploading to a Pico W using [pico-ctl](../pico-ctl):
+### Visual test suite (`examples/test_all.py`)
+
+Renders 7 pages on the e-paper covering lines, shapes, text, layout, widgets,
+edge cases, and 4-grayscale mode.  Upload and run:
 
 ```bash
 cd ../pico-ctl
-python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
-python3 pico_ctl.py upload ../pico-paper-lib/test_all.py /test_all.py
-python3 pico_ctl.py run test_all.py
+pico_ctl upload ../pico-paper-lib/examples/test_all.py /test_all.py
+pico_ctl run test_all.py
 ```
+
+### Individual examples
+
+```bash
+pico_ctl upload ../pico-paper-lib/examples/hello_world.py /test.py
+pico_ctl run test.py
+```
+
+### Verifying changes
+
+When modifying library code:
+1. Upload the updated library: `pico_ctl upload --dir ../pico-paper-lib /pico_paper_lib`
+2. Run `test_all.py` and verify all 7 pages render correctly
+3. If changing 4-gray code, also run `examples/grayscale_demo.py`
+4. If changing text/fonts, also run `examples/fonts_demo.py`
 
 ## License
 

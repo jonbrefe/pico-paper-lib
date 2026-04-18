@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """
 Low-level SPI driver for Waveshare 2.9" e-paper (SSD1680 controller).
 
@@ -77,7 +79,16 @@ _LUT_4GRAY = bytes([
 
 
 class Driver:
-    """Low-level hardware driver for SSD1680-based 2.9" e-paper."""
+    """Low-level hardware driver for SSD1680-based 2.9\" e-paper.
+
+    Handles SPI communication, hardware reset, busy-wait, and all display
+    update modes (full, partial, 4-gray).  Constructed with optional pin
+    overrides::
+
+        Driver(rst=12, dc=8, cs=9, busy=13, spi_id=1, baudrate=4_000_000)
+
+    Pin kwargs default to the Waveshare Pico CapTouch ePaper board layout.
+    """
 
     def __init__(self, **kwargs):
         cfg = dict(_DEFAULT_PINS)
@@ -117,7 +128,12 @@ class Driver:
         self.cs_pin.value(1)
 
     def _wait(self, timeout_ms=5000):
-        """Block until BUSY pin goes low or timeout."""
+        """Block until BUSY pin goes LOW (idle) or timeout.
+
+        The SSD1680 BUSY pin is active-HIGH: HIGH=busy, LOW=ready.
+        Polls every 10 ms.  *timeout_ms* prevents infinite hangs if
+        the display is unresponsive (default 5 seconds).
+        """
         start = utime.ticks_ms()
         while self.busy_pin.value() == 1:
             if utime.ticks_diff(utime.ticks_ms(), start) > timeout_ms:
@@ -234,7 +250,15 @@ class Driver:
     # Image transfer helpers
     # ------------------------------------------------------------------
     def _write_image(self, buf):
-        """Write pixel buffer to display RAM (landscape byte reorder)."""
+        """Write pixel buffer to display RAM with landscape byte reorder.
+
+        Converts the MONO_VLSB landscape framebuffer (296×128) to portrait
+        column-major order expected by data entry mode 0x07.  Iterates
+        X bytes reversed (j=15..0) so portrait-left maps to landscape-bottom,
+        then Y values (i=0..295) for each X byte.
+
+        *buf* is the raw ``bytearray`` backing a MONO_VLSB FrameBuffer.
+        """
         w8 = self.width // 8
         h = self.height
         self._cmd(0x24)
@@ -246,7 +270,12 @@ class Driver:
     # Public refresh methods
     # ------------------------------------------------------------------
     def full_update(self, buf):
-        """Full refresh — flashes display, best image quality."""
+        """Full refresh — flashes the display black/white for best image quality.
+
+        *buf* is the raw byte buffer from a MONO_VLSB FrameBuffer.
+        Takes ~2-3 seconds.  Writes to RAM 0x24, then triggers update
+        sequence 0xF7.
+        """
         self._write_image(buf)
         self._cmd(0x22)
         self._data(0xF7)
@@ -254,10 +283,14 @@ class Driver:
         self._wait()
 
     def full_update_base(self, buf):
-        """Full refresh that also writes to the 'previous' RAM frame.
+        """Full refresh that writes to both current (0x24) and previous (0x26) RAM.
 
-        Call this once before using ``partial_update`` to establish
-        the base image that partial updates are diffed against.
+        Call this once before using ``partial_update()`` to establish
+        the base image.  Partial updates diff the current RAM against
+        the previous RAM — without a base, the first partial update
+        will produce garbage.
+
+        *buf* is the raw byte buffer from a MONO_VLSB FrameBuffer.
         """
         self._cmd(0x24)
         w8 = self.width // 8
@@ -275,7 +308,18 @@ class Driver:
         self._wait()
 
     def partial_update(self, buf):
-        """Partial refresh — fast, no flash, slight ghosting over time."""
+        """Partial refresh — fast (~0.3-0.5s), no flash, slight ghosting.
+
+        Requires ``full_update_base()`` to have been called first.
+        Loads the partial-refresh waveform LUT, writes the new image
+        to RAM 0x24, then triggers update sequence 0x0F which diffs
+        against the previous frame in RAM 0x26.
+
+        Ghosting accumulates over repeated partial updates.  Do a full
+        refresh every 5-10 partial updates to clean the display.
+
+        *buf* is the raw byte buffer from a MONO_VLSB FrameBuffer.
+        """
         self.rst_pin.value(0)
         utime.sleep_ms(2)
         self.rst_pin.value(1)
@@ -299,7 +343,7 @@ class Driver:
         self._wait()
 
     def clear(self, color=0xFF):
-        """Clear display RAM to *color* and full-refresh."""
+        """Clear display RAM to *color* (0xFF=white, 0x00=black) and full-refresh."""
         w8 = self.width // 8
         h = self.height
         self._cmd(0x24)
@@ -456,11 +500,19 @@ class Driver:
         self._hw_init()
 
     def sleep(self):
-        """Enter deep-sleep mode (< 1 µA).  Call ``wake()`` to resume."""
+        """Enter deep-sleep mode (< 1 µA).
+
+        All RAM is preserved but the controller ignores all commands
+        until a hardware reset.  Call ``wake()`` to resume.
+        """
         self._cmd(0x10)
         self._data(0x01)
         utime.sleep_ms(100)
 
     def wake(self):
-        """Wake from deep sleep by performing a full hardware re-init."""
+        """Wake from deep sleep by performing a full hardware re-init.
+
+        This is the only way to exit deep sleep — there is no light-wake
+        command.  Equivalent to constructing a new Driver.
+        """
         self._hw_init()

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """
 Drawing primitives for monochrome frame-buffer displays.
 
@@ -14,7 +16,12 @@ import math
 # Lines
 # ------------------------------------------------------------------
 def thick_line(fb, x0, y0, x1, y1, color, thickness=1):
-    """Draw a line with adjustable thickness (centered on the path)."""
+    """Draw a line with adjustable thickness (centered on the path).
+
+    *fb* is a ``framebuf.FrameBuffer``.  If *thickness* is 1 or less,
+    delegates to ``fb.line()`` directly.  For a zero-length line
+    (start == end), draws a single pixel.
+    """
     if thickness <= 1:
         fb.line(x0, y0, x1, y1, color)
         return
@@ -36,7 +43,10 @@ def thick_line(fb, x0, y0, x1, y1, color, thickness=1):
 
 
 def dashed_line(fb, x0, y0, x1, y1, color, dash=4, gap=3):
-    """Draw a dashed line from (x0,y0) to (x1,y1)."""
+    """Draw a dashed line from (x0,y0) to (x1,y1).
+
+    *dash* and *gap* are pixel lengths for drawn and skipped segments.
+    """
     dx = x1 - x0
     dy = y1 - y0
     length = math.sqrt(dx * dx + dy * dy)
@@ -332,7 +342,9 @@ def _fill_polygon(fb, pts, c):
 def bitmap_col_major(fb, data, x, y, w, h, color):
     """Draw a column-major bitmap (1 bit per pixel, LSB = top row).
 
-    *data* length must be >= w; each byte represents one column of h pixels.
+    Each byte in *data* represents one column of up to 8 pixels.
+    Bit 0 is the top pixel, bit 7 is the bottom.  *data* length
+    must be >= *w*.  Only set bits are drawn (transparent background).
     """
     for col in range(w):
         byte = data[col]
@@ -342,7 +354,11 @@ def bitmap_col_major(fb, data, x, y, w, h, color):
 
 
 def bitmap_row_major(fb, data, x, y, w, h, color):
-    """Draw a row-major bitmap (MSB-first, padded to byte boundary per row)."""
+    """Draw a row-major bitmap (MSB-first, padded to byte boundary per row).
+
+    Each row is ceil(w/8) bytes wide.  Bit 7 of each byte is the leftmost
+    pixel.  Only set bits are drawn (transparent background).
+    """
     bw = (w + 7) // 8
     for row in range(h):
         for col in range(w):
@@ -358,8 +374,11 @@ def bitmap_row_major(fb, data, x, y, w, h, color):
 def flood_fill(fb, x, y, fill_color, w, h, bg_color=0xFF):
     """Simple stack-based flood fill bounded by *w* x *h*.
 
-    WARNING: can use significant RAM on large areas.  Best for small
-    enclosed regions.
+    Fills contiguous pixels matching *bg_color* starting from (x, y).
+
+    WARNING: uses a Python list as a stack — can consume significant RAM
+    on large areas.  Best for small enclosed regions (< 1000 pixels).
+    For large fills, prefer ``fill_rect()`` or scanline approaches.
     """
     if fb.pixel(x, y) != bg_color:
         return

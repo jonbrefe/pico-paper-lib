@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """
 Font base class and built-in bitmap fonts for e-paper text rendering.
 """
@@ -10,7 +12,12 @@ class BitmapFont:
 
     Subclasses must set ``_DATA``, ``_FIRST``, ``_LAST``, ``CHAR_W``, and
     ``CHAR_H``.  Each character is stored as *CHAR_W* bytes, one per column,
-    with LSB = top row.
+    with LSB = top row.  To interpret the data: byte[col] bit N = pixel at
+    row N of that column.
+
+    Characters outside the ``_FIRST``..``_LAST`` ASCII range are looked up
+    in the ``_EXT`` dict (keyed by Unicode codepoint).  If not found,
+    falls back to the ``?`` character.
     """
 
     _DATA = b''
@@ -26,10 +33,14 @@ class BitmapFont:
         return self.CHAR_W + self.GAP
 
     def _glyph(self, ch):
-        """Return (data, offset) for a character.
+        """Return (data_source, byte_offset) for a character.
 
-        Checks the main ASCII table first, then the _EXT dict for
-        accented / special characters, falling back to '?'.
+        *data_source* is either ``_DATA`` (the main font table) or a
+        bytes object from ``_EXT``.  *byte_offset* is the starting index
+        into *data_source* for the character's glyph columns.
+
+        Checks the main ASCII table first, then ``_EXT`` for accented/special
+        characters.  Falls back to ``?`` if the character is not found.
         """
         code = ord(ch)
         if self._FIRST <= code <= self._LAST:
@@ -54,7 +65,9 @@ class BitmapFont:
     def wrap_lines(self, s, max_width):
         """Word-wrap *s* to fit within *max_width* pixels.
 
-        Returns a list of strings (one per line).
+        Returns a list of strings (one per line).  Splits on spaces only —
+        long words that exceed *max_width* are placed on their own line
+        without being broken mid-word (they will overflow).
         """
         words = s.split(' ')
         lines = []
@@ -75,7 +88,11 @@ class BitmapFont:
     # Drawing
     # ------------------------------------------------------------------
     def draw_char(self, fb, ch, x, y, color):
-        """Draw a single character on *fb* and return advance width."""
+        """Draw a single character on *fb* at (x, y).
+
+        Returns the advance width (CHAR_W + GAP) so callers can position
+        the next character.  *fb* is a ``framebuf.FrameBuffer``.
+        """
         data, off = self._glyph(ch)
         for col in range(self.CHAR_W):
             byte = data[off + col]
@@ -85,7 +102,7 @@ class BitmapFont:
         return self.cell_w
 
     def draw_text(self, fb, s, x, y, color):
-        """Draw a string left-aligned at (x, y)."""
+        """Draw a string left-aligned at (x, y).  Returns total width drawn."""
         cx = x
         for ch in s:
             cx += self.draw_char(fb, ch, cx, y, color)
@@ -105,9 +122,12 @@ class BitmapFont:
                           align='left', valign='top', wrap=False, pad=4):
         """Draw text inside a bounding box with alignment and optional wrap.
 
-        align:  'left' | 'center' | 'right'
-        valign: 'top'  | 'middle' | 'bottom'
-        pad:    pixel padding inside the rectangle edges (default 4)
+        *align*: 'left', 'center', or 'right'.
+        *valign*: 'top', 'middle', or 'bottom'.
+        *pad*: symmetric pixel padding inside all four edges (default 4).
+        *wrap*: if True, word-wraps text to fit the inner width.
+        Text is not clipped — it may overflow the rectangle if the content
+        is too tall or a single word exceeds the available width.
         """
         ix, iy, iw, ih = x + pad, y + pad, w - 2 * pad, h - 2 * pad
         if wrap:
@@ -135,7 +155,9 @@ class BitmapFont:
     def draw_text_wrapped(self, fb, s, x, y, max_width, color, line_spacing=1):
         """Draw word-wrapped text starting at (x, y).
 
-        Returns total height used.
+        Returns total height used in pixels (from y to the bottom of
+        the last line, including inter-line spacing between lines but
+        not trailing spacing after the last line).
         """
         lines = self.wrap_lines(s, max_width)
         cy = y
