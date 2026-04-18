@@ -8,7 +8,7 @@ A feature-rich MicroPython library for **Waveshare 2.9" e-paper displays** (SSD1
 
 | Category | What you get |
 |---|---|
-| **Display** | Full & partial refresh, sleep/wake, landscape & portrait |
+| **Display** | Full & partial refresh, 4-grayscale mode, sleep/wake, landscape & portrait |
 | **Graphics** | Lines (thick, dashed, dotted), rectangles (rounded), circles, ellipses, triangles, polygons, bitmaps |
 | **Text** | Two built-in fonts (5×7, 8×8), left/center/right alignment, word-wrap, text-in-rect |
 | **Widgets** | Progress bar, table, bordered panel, badge/tag, dividers |
@@ -101,6 +101,62 @@ d = Display(orientation=LANDSCAPE)
 | `d.refresh_partial()` | Fast partial refresh |
 | `d.sleep()` | Deep-sleep mode (<1 µA) |
 | `d.wake()` | Wake and re-initialise |
+
+#### 4-Grayscale Mode
+
+The display supports a 4-level grayscale mode (black, dark gray, light gray, white) using a separate `Display4Gray` class. This mode uses portrait orientation (128×296) and the `GS2_HMSB` framebuffer format.
+
+```python
+from pico_paper_lib import Display4Gray
+from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE
+
+g = Display4Gray()
+g.clear()
+
+# Four bands in each gray level
+g.fill_rect(0, 0, 128, 74, GRAY_BLACK)
+g.text('BLACK', 10, 33, GRAY_WHITE)
+
+g.fill_rect(0, 74, 128, 74, GRAY_DARKGRAY)
+g.text('DARK', 10, 107, GRAY_LIGHTGRAY)
+
+g.fill_rect(0, 148, 128, 74, GRAY_LIGHTGRAY)
+g.text('LIGHT', 10, 181, GRAY_DARKGRAY)
+
+g.fill_rect(0, 222, 128, 74, GRAY_WHITE)
+g.text('WHITE', 10, 255, GRAY_BLACK)
+
+g.refresh()   # full refresh with 4-gray waveform
+g.sleep()
+```
+
+| Method | Description |
+|---|---|
+| `Display4Gray(**pins)` | Create 4-gray canvas (portrait 128×296) |
+| `g.clear(color=GRAY_WHITE)` | Fill canvas with gray level |
+| `g.fill_rect(x, y, w, h, color)` | Filled rectangle |
+| `g.rect(x, y, w, h, color, fill)` | Rectangle (outline or filled) |
+| `g.text(s, x, y, color)` | Text (built-in 8×8 font) |
+| `g.line(x0, y0, x1, y1, color)` | Line |
+| `g.hline(x, y, w, color)` | Horizontal line |
+| `g.vline(x, y, h, color)` | Vertical line |
+| `g.pixel(x, y, color)` | Single pixel |
+| `g.refresh()` | Push to display (4-gray waveform) |
+| `g.reinit_mono()` | Return driver to 1-bit mode |
+| `g.sleep()` / `g.wake()` | Power management |
+
+**Gray level constants:**
+
+| Constant | Value | Appearance |
+|---|---|---|
+| `GRAY_BLACK` | `0x00` | Black |
+| `GRAY_DARKGRAY` | `0x01` | Dark gray |
+| `GRAY_LIGHTGRAY` | `0x02` | Light gray |
+| `GRAY_WHITE` | `0x03` | White |
+
+> **Note:** 4-gray mode is portrait-only (128×296) and uses full refresh.
+> After using 4-gray, call `reinit_mono()` before switching back to a
+> standard `Display` instance.
 
 #### Drawing
 
@@ -208,7 +264,8 @@ See the `examples/` folder:
 - **hello_world.py** — Basic text and shapes
 - **dashboard.py** — Status dashboard with panels and progress bars
 - **fonts_demo.py** — All built-in fonts side by side
-- **test_all.py** — Visual test suite: 6 pages covering every API feature
+- **grayscale_demo.py** — 4-grayscale mode: gray bands, gradients, patterns
+- **test_all.py** — Visual test suite: 7 pages covering every API feature
 
 ## Module Structure
 
@@ -223,7 +280,7 @@ pico_paper_lib/
 
 ## Testing
 
-`examples/test_all.py` is a visual test that renders 6 pages on the e-paper, covering lines, shapes, text, layout, widgets, and edge cases.
+`examples/test_all.py` is a visual test that renders 7 pages on the e-paper, covering lines, shapes, text, layout, widgets, edge cases, and 4-grayscale mode.
 
 ```bash
 cd ../pico-ctl

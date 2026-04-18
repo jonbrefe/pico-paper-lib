@@ -51,6 +51,30 @@ _LUT_PARTIAL = bytes([
     0x22,0x17,0x41,0xB0,0x32,0x36,
 ])
 
+# 4-grayscale waveform LUT (159 bytes: 153 LUT + gate/source voltages + VCOM).
+# Derived from Waveshare Pico_CapTouch_ePaper example code (MIT license header).
+_LUT_4GRAY = bytes([
+    0x00,0x60,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x20,0x60,0x10,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x28,0x60,0x14,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x2A,0x60,0x15,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x90,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x02,0x00,0x05,0x14,0x00,0x00,
+    0x1E,0x1E,0x00,0x00,0x00,0x00,0x01,
+    0x00,0x02,0x00,0x05,0x14,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x24,0x22,0x22,0x22,0x23,0x32,0x00,0x00,0x00,
+    0x22,0x17,0x41,0xAE,0x32,0x28,
+])
+
 
 class Driver:
     """Low-level hardware driver for SSD1680-based 2.9" e-paper."""
@@ -158,6 +182,42 @@ class Driver:
             self._data(b)
         self._wait()
 
+    def _send_lut_4gray(self):
+        """Write 4-gray LUT + voltage settings (159 bytes total)."""
+        self._cmd(0x32)
+        for i in range(153):
+            self._data(_LUT_4GRAY[i])
+        self._wait()
+        self._cmd(0x3F)
+        self._data(_LUT_4GRAY[153])
+        self._cmd(0x03)          # gate voltage
+        self._data(_LUT_4GRAY[154])
+        self._cmd(0x04)          # source voltage
+        self._data(_LUT_4GRAY[155])   # VSH
+        self._data(_LUT_4GRAY[156])   # VSH2
+        self._data(_LUT_4GRAY[157])   # VSL
+        self._cmd(0x2C)          # VCOM
+        self._data(_LUT_4GRAY[158])
+
+    def _hw_init_4gray(self):
+        """Hardware init for 4-grayscale mode."""
+        self._reset()
+        self._wait()
+        self._cmd(0x12)          # SW_RESET
+        self._wait()
+        self._cmd(0x01)          # DRIVER_OUTPUT_CONTROL
+        self._data(0x27)         # MUX = 295
+        self._data(0x01)
+        self._data(0x00)
+        self._cmd(0x11)          # DATA_ENTRY_MODE
+        self._data(0x03)         # X inc, Y inc (portrait)
+        self._set_window(8, 0, self.width, self.height - 1)
+        self._cmd(0x3C)          # border waveform
+        self._data(0x04)
+        self._set_cursor(8, 0)
+        self._wait()
+        self._send_lut_4gray()
+
     # ------------------------------------------------------------------
     # Image transfer helpers
     # ------------------------------------------------------------------
@@ -237,6 +297,93 @@ class Driver:
         self._data(0xF7)
         self._cmd(0x20)
         self._wait()
+
+    def gray4_update(self, buf):
+        """Display a 4-grayscale image.
+
+        *buf* is a GS2_HMSB framebuffer (2 bits per pixel, 128×296 portrait).
+        The 2bpp data is split into two 1bpp bit-planes written to RAM 0x24
+        and 0x26 respectively.  Total raw size: 128×296/4 = 9472 bytes.
+
+        Pixel encoding (GS2_HMSB):
+          0x03 = white, 0x02 = light gray, 0x01 = dark gray, 0x00 = black
+        """
+        self._hw_init_4gray()
+        total = self.height * self.width // 4  # 9472 bytes for 128×296
+
+        # --- Bit-plane 0 → RAM 0x24 ---
+        self._cmd(0x24)
+        for i in range(total):
+            temp3 = 0
+            for j in range(2):
+                temp1 = buf[i * 2 + j]
+                for k in range(2):
+                    temp2 = temp1 & 0x03
+                    if temp2 == 0x03:
+                        temp3 |= 0x00   # white
+                    elif temp2 == 0x00:
+                        temp3 |= 0x01   # black
+                    elif temp2 == 0x02:
+                        temp3 |= 0x00   # light gray
+                    else:
+                        temp3 |= 0x01   # dark gray
+                    temp3 <<= 1
+                    temp1 >>= 2
+                    temp2 = temp1 & 0x03
+                    if temp2 == 0x03:
+                        temp3 |= 0x00
+                    elif temp2 == 0x00:
+                        temp3 |= 0x01
+                    elif temp2 == 0x02:
+                        temp3 |= 0x00
+                    else:
+                        temp3 |= 0x01
+                    if j != 1 or k != 1:
+                        temp3 <<= 1
+                    temp1 >>= 2
+            self._data(temp3)
+
+        # --- Bit-plane 1 → RAM 0x26 ---
+        self._cmd(0x26)
+        for i in range(total):
+            temp3 = 0
+            for j in range(2):
+                temp1 = buf[i * 2 + j]
+                for k in range(2):
+                    temp2 = temp1 & 0x03
+                    if temp2 == 0x03:
+                        temp3 |= 0x00   # white
+                    elif temp2 == 0x00:
+                        temp3 |= 0x01   # black
+                    elif temp2 == 0x02:
+                        temp3 |= 0x01   # light gray
+                    else:
+                        temp3 |= 0x00   # dark gray
+                    temp3 <<= 1
+                    temp1 >>= 2
+                    temp2 = temp1 & 0x03
+                    if temp2 == 0x03:
+                        temp3 |= 0x00
+                    elif temp2 == 0x00:
+                        temp3 |= 0x01
+                    elif temp2 == 0x02:
+                        temp3 |= 0x01
+                    else:
+                        temp3 |= 0x00
+                    if j != 1 or k != 1:
+                        temp3 <<= 1
+                    temp1 >>= 2
+            self._data(temp3)
+
+        # Trigger 4-gray display update
+        self._cmd(0x22)
+        self._data(0xC7)
+        self._cmd(0x20)
+        self._wait()
+
+    def reinit(self):
+        """Re-init to standard 1-bit mode after using 4-gray mode."""
+        self._hw_init()
 
     def sleep(self):
         """Enter deep-sleep mode (< 1 µA).  Call ``wake()`` to resume."""

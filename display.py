@@ -18,6 +18,12 @@ PORTRAIT = 1    # 128 x 296
 BLACK = 0x00
 WHITE = 0xFF
 
+# Colour aliases for 4-grayscale mode (GS2_HMSB encoding)
+GRAY_BLACK = 0x00
+GRAY_DARKGRAY = 0x01
+GRAY_LIGHTGRAY = 0x02
+GRAY_WHITE = 0x03
+
 
 class Display:
     """High-level e-paper canvas.
@@ -337,3 +343,117 @@ class Display:
     def icon(self, data, x, y, w=7, h=7, color=BLACK):
         """Draw a small bitmap icon (column-major, LSB=top)."""
         gfx.bitmap_col_major(self._fb, data, x, y, w, h, color)
+
+
+class Display4Gray:
+    """4-grayscale e-paper canvas (portrait 128×296).
+
+    Provides a ``framebuf.FrameBuffer`` in ``GS2_HMSB`` mode (2 bits per
+    pixel) giving four gray levels: white, light gray, dark gray, black.
+
+    4-gray mode uses portrait orientation only (128×296) because the
+    SSD1680's 4-gray waveform is portrait-locked in hardware.
+
+    Usage::
+
+        from pico_paper_lib.display import Display4Gray
+        from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY
+        from pico_paper_lib.display import GRAY_LIGHTGRAY, GRAY_WHITE
+
+        g = Display4Gray()
+        g.clear()
+        g.fill_rect(0, 0, 128, 74, GRAY_BLACK)
+        g.text('BLACK', 10, 33, GRAY_WHITE)
+        g.fill_rect(0, 74, 128, 74, GRAY_DARKGRAY)
+        g.text('DARK', 10, 107, GRAY_LIGHTGRAY)
+        g.fill_rect(0, 148, 128, 74, GRAY_LIGHTGRAY)
+        g.text('LIGHT', 10, 181, GRAY_DARKGRAY)
+        g.fill_rect(0, 222, 128, 74, GRAY_WHITE)
+        g.text('WHITE', 10, 255, GRAY_BLACK)
+        g.refresh()
+
+    .. note::
+        After using 4-gray mode, call ``reinit_mono()`` to return
+        a standard ``Display`` to normal 1-bit operation.
+    """
+
+    def __init__(self, **pin_kwargs):
+        self._drv = Driver(**pin_kwargs)
+        self.width = WIDTH    # 128 (portrait)
+        self.height = HEIGHT  # 296 (portrait)
+        self._buf = bytearray(self.height * self.width // 4)
+        self._fb = framebuf.FrameBuffer(
+            self._buf, self.width, self.height, framebuf.GS2_HMSB
+        )
+        self._font = font_small
+
+    @property
+    def framebuffer(self):
+        """Direct access to the underlying FrameBuffer."""
+        return self._fb
+
+    @property
+    def buffer(self):
+        """Raw byte buffer backing the framebuffer."""
+        return self._buf
+
+    # ------------------------------------------------------------------
+    # Canvas
+    # ------------------------------------------------------------------
+    def clear(self, color=GRAY_WHITE):
+        """Fill the canvas with a gray level."""
+        self._fb.fill(color)
+
+    def fill(self, color):
+        """Alias for clear."""
+        self._fb.fill(color)
+
+    # ------------------------------------------------------------------
+    # Refresh
+    # ------------------------------------------------------------------
+    def refresh(self):
+        """Push the 4-gray canvas to the display (full refresh only)."""
+        self._drv.gray4_update(self._buf)
+
+    def reinit_mono(self):
+        """Re-initialise the driver for standard 1-bit mode."""
+        self._drv.reinit()
+
+    def sleep(self):
+        """Put the e-paper into deep-sleep mode."""
+        self._drv.sleep()
+
+    def wake(self):
+        """Wake from deep-sleep and re-initialise."""
+        self._drv.wake()
+
+    # ------------------------------------------------------------------
+    # Drawing (framebuf builtins — colors are 0..3)
+    # ------------------------------------------------------------------
+    def pixel(self, x, y, color=GRAY_BLACK):
+        self._fb.pixel(x, y, color)
+
+    def line(self, x0, y0, x1, y1, color=GRAY_BLACK):
+        self._fb.line(x0, y0, x1, y1, color)
+
+    def hline(self, x, y, w, color=GRAY_BLACK):
+        self._fb.hline(x, y, w, color)
+
+    def vline(self, x, y, h, color=GRAY_BLACK):
+        self._fb.vline(x, y, h, color)
+
+    def rect(self, x, y, w, h, color=GRAY_BLACK, fill=False):
+        if fill:
+            self._fb.fill_rect(x, y, w, h, color)
+        else:
+            self._fb.rect(x, y, w, h, color)
+
+    def fill_rect(self, x, y, w, h, color=GRAY_BLACK):
+        self._fb.fill_rect(x, y, w, h, color)
+
+    def text(self, s, x, y, color=GRAY_BLACK, font=None):
+        """Draw text using the built-in framebuf 8×8 font (GS2 mode)."""
+        self._fb.text(s, x, y, color)
+
+    def set_font(self, font):
+        self._font = font

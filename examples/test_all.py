@@ -1,10 +1,10 @@
 """
 test_all.py — Comprehensive visual test suite for pico-paper-lib.
 
-Renders 6 full-screen pages on the Waveshare 2.9" e-paper display,
-exercising every public method of the Display class.  After each page
-the script pauses for a configurable number of seconds so the user can
-photograph the display for visual review.
+Renders 7 full-screen pages on the Waveshare 2.9" e-paper display,
+exercising every public method of the Display and Display4Gray classes.
+After each page the script pauses for a configurable number of seconds
+so the user can photograph the display for visual review.
 
 Pages:
   1. Lines & Pixels   — line(), hline(), vline(), dashed_line(),
@@ -21,6 +21,8 @@ Pages:
   6. Edge Cases        — full-screen border, corner text, tiny shapes,
                          overlapping shapes, max text length clipping,
                          large circles/ellipses, thick diagonal lines
+  7. 4-Grayscale       — Display4Gray, 4 gray bands, gradient bar,
+                         checkerboard, concentric rects, gray lines
 
 The loop repeats indefinitely (with a 10 s pause between loops) so the
 test can run unattended while monitoring via serial or `pico_ctl watch`.
@@ -30,8 +32,9 @@ Upload & run:
   pico_ctl run test_all.py
 """
 
-from pico_paper_lib import Display
+from pico_paper_lib import Display, Display4Gray
 from pico_paper_lib.display import BLACK, WHITE
+from pico_paper_lib.display import GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE
 from pico_paper_lib.fonts import font_small, font_medium
 import time
 import gc
@@ -426,11 +429,65 @@ while True:
     pause('Edge Cases')
 
     # =================================================================
+    # PAGE 7 — 4-Grayscale
+    # Covers: Display4Gray, fill_rect(), text(), hline(), refresh(),
+    #         GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE
+    # =================================================================
+    # 4-gray uses a separate Display4Gray object with portrait orientation
+    # (128×296) and GS2_HMSB framebuffer (2 bits per pixel, 4 gray levels).
+    g = Display4Gray()
+    g.clear()
+
+    # Title
+    g.text('PAGE 7: 4-GRAY', 8, 4, GRAY_BLACK)
+
+    # -- Four gray bands --
+    # Each band is 128px wide × 50px tall, one per gray level.
+    band_h = 50
+    band_y = 18
+    g.fill_rect(0, band_y, 128, band_h, GRAY_BLACK)
+    g.text('BLACK', 10, band_y + 20, GRAY_WHITE)
+
+    g.fill_rect(0, band_y + band_h, 128, band_h, GRAY_DARKGRAY)
+    g.text('DARK GRAY', 10, band_y + band_h + 20, GRAY_LIGHTGRAY)
+
+    g.fill_rect(0, band_y + band_h * 2, 128, band_h, GRAY_LIGHTGRAY)
+    g.text('LIGHT GRAY', 10, band_y + band_h * 2 + 20, GRAY_DARKGRAY)
+
+    g.fill_rect(0, band_y + band_h * 3, 128, band_h, GRAY_WHITE)
+    g.text('WHITE', 10, band_y + band_h * 3 + 20, GRAY_BLACK)
+
+    # -- Gradient bar (4 columns) --
+    grad_y = band_y + band_h * 4 + 4
+    g.text('Gradient:', 8, grad_y, GRAY_BLACK)
+    grad_y += 12
+    colors_4g = [GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE]
+    for i, c in enumerate(colors_4g):
+        g.fill_rect(i * 32, grad_y, 32, 24, c)
+
+    # -- Checkerboard --
+    check_y = grad_y + 30
+    g.text('Checkerboard:', 8, check_y, GRAY_BLACK)
+    check_y += 12
+    sq = 16
+    for row in range(2):
+        for col in range(8):
+            g.fill_rect(col * sq, check_y + row * sq, sq, sq,
+                        colors_4g[(row + col) % 4])
+
+    g.refresh()
+    # Re-init driver for 1-bit mode so the next loop iteration works
+    g.reinit_mono()
+    del g
+    gc.collect()
+    pause('4-Grayscale')
+
+    # =================================================================
     # DONE — Summary screen before the next loop iteration
     # =================================================================
     d.clear()
     d.text_centered('ALL TESTS COMPLETE', 148, 42, font=font_medium)
-    d.text_centered('6 pages rendered  |  loop ' + str(loop), 148, 58)
+    d.text_centered('7 pages rendered  |  loop ' + str(loop), 148, 58)
     gc.collect()
     d.text_centered('Free mem: ' + str(gc.mem_free()), 148, 72)
     d.text_centered('Restarting in 10s...', 148, 88)

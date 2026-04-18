@@ -6,4 +6,4 @@ MIT License · https://github.com/jonbrefe/pico-paper-lib
 
 __version__ = '0.1.0'
 
-from .display import Display
+from .display import Display, Display4Gray
