@@ -309,7 +309,7 @@ class Driver:
           0x03 = white, 0x02 = light gray, 0x01 = dark gray, 0x00 = black
         """
         self._hw_init_4gray()
-        total = self.height * self.width // 4  # 9472 bytes for 128×296
+        total = self.height * self.width // 8  # 4736 output bytes (1bpp per plane)
 
         # --- Bit-plane 0 → RAM 0x24 ---
         self._cmd(0x24)
